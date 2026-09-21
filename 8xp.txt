@@ -1,0 +1,31 @@
+8XP File
+
+Header: 55 bytes @ 0x00
+	Signature 1: 8 bytes @ 0x00
+		"**TI83F*" (0x2a, 0x2a, 0x54, 0x49, 0x38, 0x33, 0x46, 0x2a)
+	Signature 2: 2 bytes @ 0x08
+		0x1a, 0x0a
+	Magic number: 1 byte @ 0x0a		Unknown purpose
+		0x00
+	Comment: 42 bytes @ 0x0b		Pad filled by zeroes
+	Metadata and Program length: 2 bytes @ 0x35
+Metadata: 19 bytes @ 0x37
+	Flag: 1 byte @ 0x37			Unknown purpose
+		0x0d
+	Magic number: 1 byte @ 0x38		Unknown purpose
+		0x00
+	Program and checksum length: 2 bytes @ 0x39
+	File type: 1 byte @ 0x3b
+		0x05 = Normal, 0x06 = Edit-Locked, 0x17 = Group, 0x24 = flash application
+	Program Name: 8 bytes @ 0x3c		Pad filled by zeroes
+	Magic number: 1 byte @ 0x44		Unknown purpose
+		0x00
+	Storage: 1 byte @ 0x45
+		0x00 = RAM, 0x80 = Archived
+	Program and checksum length 2 bytes @ 0x46
+	Program length: 2 bytes @ 0x48
+Program: (variable length) @ 0x4a
+Checksum: 2 Bytes @ 0x4a + (Program length)	2 lower bytes of metadata and program checksum
+
+*All lengths are little-endian
+

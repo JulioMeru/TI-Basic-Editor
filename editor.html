@@ -1,0 +1,138 @@
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TI-Basic Editor</title>
+<style>
+textarea, input {border: 1px solid black;}
+</style>
+</head>
+<body>
+<br><label for="inputfile">Open 8XP file: </label><input type="file" id="inputfile" onchange="loadfile()" accept=".8xp">
+<br><span>Name: </span><input type="text" size="8" id="name" title="8 Character Limit">
+<span>Comment: </span><input type="text" size="40" id="comment" title="42 Character Limit">
+<select id="storage"><option>RAM</option><option>Archived</option></select>
+<select id="fileType"><option>Normal</option><option>Edit-Locked</option><option>Group</option><option>Flash</option></select>
+<select id="compiled"><option>Non-Compiled</option><option>CompiledASM</option></select>
+<span>Length: </span><input type="text" size=5" id="programLength" title="Number of tokens" disabled>
+<span>Checksum: </span><input type="text" size=5" id="checksum" hidden disabled>
+<input type="input" disabled id="passesChecksum" size="5" title="True if content matches checksum">
+<button onclick="download8XP()">Download 8XP</button>
+<br><textarea id="program" rows="17" cols="50" spellcheck="false"></textarea>
+<br>
+<script src="tokens.js"></script>
+<script>
+var index = 0x41;
+var filetypes = {"\x05":"Normal", "\x06":"Edit-Locked", "\x17":"Group", "\x24":"Flash"};
+var characters = "►→°ֿ¹²T³⁻θ≤≥≠π√∟×̄ΣσχΔ";
+
+for (var i=0; i<characters.length; i++) {
+    var b = document.createElement("button");
+    b.innerText = characters[i];
+    b.setAttribute("onclick", "appendSymbol(this);");
+    document.body.append(b);
+}
+function appendSymbol(c) {
+    var e = getEl("program"), v = e.value, p = e.selectionStart;
+    e.value = v.slice(0, p) + c.innerText + v.slice(p);
+    e.focus(); e.selectionStart = p+1; e.selectionEnd = p+1;
+}
+function download8XP() {
+    var f = {};
+    for (k of ["name", "comment", "program", "storage", "fileType", "compiled", "programLength", "checksum", "passesChecksum"]) f[k] = getEl(k).value;
+    f.checksum = 0;
+    var data = new Uint8Array(create8XP(f));
+    var blob = new Blob([data], {type: "application/octet-stream"});
+    var link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.download = (f.name || "PROG") + ".8xp";
+    link.click();
+}
+function loadfile() {
+    function sortFile(f) {
+        var r = {};
+        index = f;
+        r.name = f.substr(0x3c, 8).split("\x00")[0];
+        r.comment = f.substr(0x0b, 42).split("\x00")[0];
+        r.fileType = filetypes[f[0x3b]];
+        r.storage = f[0x45] == "\x00" ? "RAM" : "Archived";
+        r.programLength = f[0x49].charCodeAt(0) * 0x100 + f[0x48].charCodeAt(0);
+        r.checksum = f[0x4a+r.programLength+1].charCodeAt(0) * 0x100 + f[0x4a+r.programLength].charCodeAt(0);
+        r.program = "";
+        r.compiled = f.substr(0x4a, 2) == "\xbb\x6d" ? "CompiledASM" : "Non-Compiled";
+        var sum = 0; for (var i=0x37; i<0x4a+r.programLength; i++) {sum += f[i].charCodeAt(0);}
+        r.passesChecksum = sum == r.checksum;
+        if (r.compiled == "CompiledASM") {
+            r.program = "AsmPrgm\n";
+            for (var i=0x4a+2; i<0x4a+r.programLength; i++) {
+                hex = f[i].charCodeAt(0).toString(16).toUpperCase();
+                r.program += hex.length > 1 ? hex : "0" + hex;
+            }
+        } else {
+            for (var i=0x4a; i<0x4a+r.programLength; i++) {
+                var t = f[i].charCodeAt(0);
+                if (extended.indexOf(t) > 0) {
+                   r.program += tokens[extended.indexOf(t) * 0x100 + f[i+1].charCodeAt(0)];
+                   i++;
+                } else {
+                    r.program += tokens[t];
+                }
+            }
+        }
+        return r;
+    }
+    var fr = new FileReader();
+    fr.readAsBinaryString(getEl("inputfile").files[0]);
+    fr.onload = function() {
+        if (fr.result.substr(0x0, 8) !== "**TI83F*") return;
+        var f = sortFile(fr.result);
+        var keys = Object.keys(f);
+        for (var i=0; i<keys.length; i++) {
+            getEl(keys[i]).value = f[keys[i]];   
+        }
+    };
+}
+function create8XP(f) {
+    var output = [0x2a, 0x2a, 0x54, 0x49, 0x38, 0x33, 0x46, 0x2a, 0x1a, 0x0a, 0x00];
+    var bin = f.compiled == "CompiledASM" && getEl("program").value.startsWith("AsmPrgm") ? compiled2Bytes() : code2Bytes();
+    for (var i=0; i<41+19; i++) output.push(0x00);
+    output[0x35] = (19+bin.length)%0x100; output[0x36] = Math.floor((19+bin.length)/0x100)%0x100;
+    output[0x37] = 0x0d;
+    output[0x39] = (2+bin.length)%0x100; output[0x3a] = Math.floor((2+bin.length)/0x100)%0x100;
+    for (k of Object.keys(filetypes)) {if (filetypes[k]==f.fileType) {output[0x3b] = k.charCodeAt(0); break;}}
+    for (var i=0; i<f.comment.slice(0, 42).length; i++) output[0x0b+i] = f.comment.charCodeAt(i);
+    for (var i=0; i<f.name.slice(0, 8).length; i++) output[0x3c+i] = f.name.charCodeAt(i);
+    output[0x45] = f.storage == "Archived" ? 0x80 : 0x00;
+    output[0x46] = (2+bin.length)%0x100; output[0x47] = Math.floor((2+bin.length)/0x100)%0x100;
+    output[0x48] = (bin.length)%0x100; output[0x49] = Math.floor((bin.length)/0x100)%0x100;
+    for (var i=0; i<bin.length; i++) output.push(bin[i]);
+    for (var i=0x37; i<0x4a+bin.length; i++) f.checksum += output[i];
+    output.push(f.checksum%0x100); output.push(Math.floor(f.checksum/0x100)%0x100);
+    return output;
+}
+function compiled2Bytes() {
+    var bytes = [0xbb, 0x6d]; var program = getEl("program").value.replace("AsmPrgm", "").split("\n").join('');
+    for (var i=0; i<program.length/2; i++) bytes.push(parseInt(program.substring(i*2, i*2+2), 16));
+    return bytes;
+}
+function code2Bytes() {
+    function tryCode(s) {
+        while (tokens.indexOf(s) < 0 && s.length > 0) s = s.substr(0, s.length-1);
+        return tokens.indexOf(s);
+    }
+    var program = getEl("program").value; var bytes = []; var i=0;
+    while (i<program.length) {
+        var t = tryCode(program.substr(i, 15));
+        if (t<0) return "ERROR: '" + program.substr(i, 10) + "' at index " + i;
+        if (t>0xff) {
+            bytes.push(extended[Math.floor(t/0x100)]);
+        }
+        bytes.push(t % 0x100); 
+        i += tokens[t].length;
+    }
+    return bytes;
+}
+function getEl(id) {return document.getElementById(id);}
+</script>
+</body>
+</html>

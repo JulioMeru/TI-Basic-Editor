@@ -1,0 +1,65 @@
+<html>
+<body>
+<textarea rows="20" cols="40" id="code" spellcheck="false">ld hl,4</textarea>
+<button onclick="a()">DO</button>
+<script>
+var code = document.getElementById("code");
+var opcodes = [
+    ["LD HL, **", 0x21, 2],
+    ["LD (**), HL", 0x22, 2],
+    ["INC B", 0x04, 1],
+];
+var EQUATES = {"CurRow":"$1000"};
+
+function a() {
+    function convertOpcode(line) {
+        var output = [];
+        for (var i=0; i<opcodes.length; i++) {
+            var re = new RegExp("\\s*" + opcodes[i][0].replaceAll(/\*{1,2}/g, "\\d+").replace("(", "\\(").replace(")", "\\)") + "\\s*");
+            if (line.match(re) && line.match(re)[0].length == line.length) {
+                output.push(opcodes[i][1]);
+                if (line.match(/\d+/))
+                    output.push(parseInt(line.match(/\d+/)[0]));
+                break;
+            }
+        }
+        return output;
+    }
+    function convertEquates(line) {
+        var keys = Object.keys(EQUATES);
+        for (var i=0; i<keys.length; i++) line = line.replace(keys[i], EQUATES[keys[i]]);
+        return line;
+    }
+    function convertNumbers(line) {
+        var m = line.match(/\$[0-9A-F]+|[0-9A-F]+H/g);
+        if (m) {for (var i=0; i<m.length; i++) line = line.replace(m[i], parseInt(m[i].replace('$','').replace('H',''), 16).toString());}
+        while(op = line.match(/\d\s*(\+|\-|\*|\/|\%)\s*\d/)) line = line.replace(op[0], eval(op[0]));   // Evaluate aritmetic
+        return line;
+    }
+    function convertLine(line) {
+        var output = []
+        var l = convertEquates(line).toUpperCase().replaceAll(/,/g, ", ").replaceAll(/\s+/g, " ")
+        l = convertNumbers(l);
+        if (l.match(/\w+\s+.EQU\s+\w+/)) {
+            console.log("here");
+            EQUATES[l.split(".EQU")[0].replace(/\s/g, '')] = l.split(".EQU")[1].replace(/\s/g,'');
+            return [];
+        }
+        output = output.concat(convertOpcode(l));
+        return output;
+    }
+    var output = [];
+    var lines = code.value.split("\n");
+    for (var i=0; i<lines.length; i++) {
+        output = output.concat(convertLine(lines[i]));
+    }
+    console.log(output);
+}
+// Steps:
+// 1. Convert defines
+// 2. Convert numbers to decimal
+// 3. Convert instruction into opcodes
+// 4. Compute labels on second pass
+</script>
+</body>
+</html>
